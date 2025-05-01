@@ -159,7 +159,7 @@
                     newsGrid.innerHTML += `
                         <article class="news-card">
                             <div class="news-image">
-                                <img src="${news.image_url}" alt="${news.title}" onerror="this.src='https://via.placeholder.com/300x200?text=Crypto+News'">
+                                <img src="${news.image_url || 'https://via.placeholder.com/300x200?text=Crypto+News'}" alt="${news.title}">
                             </div>
                             <div class="news-content">
                                 <a href="${news.link}" target="_blank">
@@ -180,6 +180,10 @@
                         </article>
                     `;
                 });
+            })
+            .catch(error => {
+                console.error('加載新聞時發生錯誤:', error);
+                document.getElementById('newsGrid').innerHTML = '<p>無法加載新聞，請稍後再試。</p>';
             });
     }
 
@@ -187,35 +191,42 @@
     function loadCryptoData() {
         fetch('prices.json')
             .then(response => response.json())
-            .then(data => {
+            .then(cryptos => {
                 const cryptoGrid = document.getElementById('cryptoGrid');
                 cryptoGrid.innerHTML = '';
                 
-                data.cryptos.forEach(crypto => {
-                    const changeClass = crypto.change24h >= 0 ? 'positive' : 'negative';
-                    const changeIcon = crypto.change24h >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                // 計算總市值和交易量
+                let totalMarketCap = 0;
+                let totalVolume = 0;
+                
+                cryptos.forEach(crypto => {
+                    totalMarketCap += crypto.market_cap || 0;
+                    totalVolume += crypto.volume_24h || 0;
+                    
+                    const changeClass = crypto.change_24h >= 0 ? 'positive' : 'negative';
+                    const changeIcon = crypto.change_24h >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
                     
                     cryptoGrid.innerHTML += `
                         <div class="crypto-card" onclick="window.location.href='crypto-detail.html?symbol=${crypto.symbol}'">
                             <div class="crypto-header">
-                                <i class="crypto-icon ${crypto.icon}"></i>
-                                <h2>${crypto.name} <span class="crypto-symbol">${crypto.symbol}</span></h2>
+                                <i class="crypto-icon fab fa-bitcoin"></i>
+                                <h2>${crypto.name || crypto.symbol} <span class="crypto-symbol">${crypto.symbol}</span></h2>
                             </div>
                             <div class="crypto-price">
                                 <span class="price">$${formatNumber(crypto.price)}</span>
                                 <span class="change ${changeClass}">
                                     <i class="fas ${changeIcon}"></i>
-                                    ${Math.abs(crypto.change24h)}%
+                                    ${Math.abs(crypto.change_24h)}%
                                 </span>
                             </div>
                             <div class="crypto-details">
                                 <div class="volume">
                                     <span>24h 交易量:</span>
-                                    <span>$${formatNumber(crypto.volume24h)}</span>
+                                    <span>$${formatNumber(crypto.volume_24h)}</span>
                                 </div>
                                 <div class="high-low">
-                                    <span>高: $${formatNumber(crypto.high24h)}</span>
-                                    <span>低: $${formatNumber(crypto.low24h)}</span>
+                                    <span>高: $${formatNumber(crypto.high_24h)}</span>
+                                    <span>低: $${formatNumber(crypto.low_24h)}</span>
                                 </div>
                             </div>
                             <div class="crypto-chart">
@@ -226,15 +237,20 @@
                 });
                 
                 // 更新市場概況
-                document.getElementById('totalMarketCap').textContent = `$${formatNumber(data.totalMarketCap)}`;
-                document.getElementById('totalVolume').textContent = `$${formatNumber(data.totalVolume)}`;
-                document.getElementById('btcDominance').textContent = `${data.btcDominance.toFixed(2)}%`;
+                document.getElementById('totalMarketCap').textContent = `$${formatNumber(totalMarketCap)}`;
+                document.getElementById('totalVolume').textContent = `$${formatNumber(totalVolume)}`;
+                
+                // 計算比特幣主導率
+                const btc = cryptos.find(c => c.symbol === 'BTC');
+                const btcDominance = btc ? (btc.market_cap / totalMarketCap * 100) : 0;
+                document.getElementById('btcDominance').textContent = `${btcDominance.toFixed(2)}%`;
                 
                 // 更新最後更新時間
                 document.querySelector('.last-updated').textContent = `最後更新: ${new Date().toLocaleTimeString('zh-TW')}`;
-                
-                // 初始化圖表
-                updateCharts(data.cryptos);
+            })
+            .catch(error => {
+                console.error('加載加密貨幣數據時發生錯誤:', error);
+                document.getElementById('cryptoGrid').innerHTML = '<p>無法加載加密貨幣數據，請稍後再試。</p>';
             });
     }
 
