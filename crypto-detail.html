@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>加密貨幣詳細信息</title>
+    <title>加密貨幣詳細資料</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -14,8 +14,16 @@
                 <i class="fas fa-coins"></i>
                 加密貨幣資訊網
             </div>
+            <div class="search-container">
+                <input type="text" id="crypto-search" placeholder="搜索加密貨幣...">
+                <button onclick="searchCrypto()">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
             <ul>
-                <li><a href="index.html"><i class="fas fa-home"></i> 返回首頁</a></li>
+                <li><a href="index.html"><i class="fas fa-home"></i> 首頁</a></li>
+                <li><a href="index.html#market"><i class="fas fa-chart-line"></i> 市場</a></li>
+                <li><a href="index.html#news"><i class="fas fa-newspaper"></i> 新聞</a></li>
             </ul>
         </nav>
     </header>
@@ -23,23 +31,23 @@
     <main class="crypto-detail-container">
         <div class="crypto-detail-header">
             <div class="crypto-info">
-                <i class="crypto-icon" id="cryptoIcon"></i>
-                <h1 id="cryptoName"></h1>
-                <span class="crypto-symbol" id="cryptoSymbol"></span>
+                <i class="crypto-icon fab fa-bitcoin"></i>
+                <h1 id="cryptoName">Loading...</h1>
+                <span class="crypto-symbol" id="cryptoSymbol">Loading...</span>
             </div>
             <div class="crypto-price-info">
                 <div class="current-price">
-                    <span class="price" id="currentPrice"></span>
-                    <span class="change" id="priceChange"></span>
+                    <span class="price" id="currentPrice">$0</span>
+                    <span class="change" id="priceChange">0%</span>
                 </div>
                 <div class="price-stats">
                     <div class="stat">
                         <span class="label">24h 高點</span>
-                        <span class="value" id="high24h"></span>
+                        <span class="value" id="high24h">$0</span>
                     </div>
                     <div class="stat">
                         <span class="label">24h 低點</span>
-                        <span class="value" id="low24h"></span>
+                        <span class="value" id="low24h">$0</span>
                     </div>
                 </div>
             </div>
@@ -49,47 +57,77 @@
             <div class="crypto-stats">
                 <div class="stat-card">
                     <h3>市值</h3>
-                    <p id="marketCap"></p>
+                    <p id="marketCap">$0</p>
                 </div>
                 <div class="stat-card">
                     <h3>24h 交易量</h3>
-                    <p id="volume24h"></p>
+                    <p id="volume24h">$0</p>
                 </div>
                 <div class="stat-card">
-                    <h3>FDV</h3>
-                    <p id="fdv"></p>
+                    <h3>FDV (完全稀釋估值)</h3>
+                    <p id="fdv">$0</p>
                 </div>
                 <div class="stat-card">
                     <h3>Vol/Mkt Cap (24h)</h3>
-                    <p id="volMktCap"></p>
+                    <p id="volMktCap">0%</p>
                 </div>
                 <div class="stat-card">
                     <h3>總供給量</h3>
-                    <p id="totalSupply"></p>
+                    <p id="totalSupply">0</p>
                 </div>
                 <div class="stat-card">
                     <h3>最大供給量</h3>
-                    <p id="maxSupply"></p>
+                    <p id="maxSupply">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>流通供給量</h3>
+                    <p id="circulatingSupply">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>流通率</h3>
+                    <p id="circulatingRate">0%</p>
                 </div>
             </div>
 
             <div class="crypto-charts">
                 <div class="chart-container">
-                    <h3>價格趨勢</h3>
+                    <h3>價格趨勢 (24h)</h3>
                     <canvas id="priceChart"></canvas>
                 </div>
                 <div class="chart-container">
-                    <h3>交易量趨勢</h3>
+                    <h3>交易量趨勢 (24h)</h3>
                     <canvas id="volumeChart"></canvas>
                 </div>
             </div>
+        </div>
 
-            <div class="crypto-news">
-                <h3>相關新聞</h3>
-                <div class="news-list" id="relatedNews"></div>
+        <div class="crypto-news">
+            <h3>相關新聞</h3>
+            <div class="news-list" id="relatedNews">
+                <!-- 相關新聞將由 JavaScript 動態生成 -->
             </div>
         </div>
     </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>關於我們</h4>
+                <p>提供最即時的加密貨幣市場資訊和新聞</p>
+            </div>
+            <div class="footer-section">
+                <h4>快速連結</h4>
+                <ul>
+                    <li><a href="index.html">首頁</a></li>
+                    <li><a href="index.html#market">市場</a></li>
+                    <li><a href="index.html#news">新聞</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 加密貨幣資訊網. 保留所有權利.</p>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="crypto-detail.js"></script>

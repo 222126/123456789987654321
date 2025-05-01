@@ -30,15 +30,24 @@
     </header>
 
     <main>
-        <section id="home" class="hero">
-            <h1>即時加密貨幣行情</h1>
-            <p class="last-updated">Last Updated: Loading...</p>
-            <div class="crypto-grid" id="cryptoGrid">
-                <!-- 加密貨幣卡片將由 JavaScript 動態生成 -->
+        <div class="content-wrapper">
+            <div class="crypto-section">
+                <h2>即時加密貨幣行情</h2>
+                <p class="last-updated">最後更新: Loading...</p>
+                <div class="crypto-grid" id="cryptoGrid">
+                    <!-- 加密貨幣卡片將由 JavaScript 動態生成 -->
+                </div>
             </div>
-        </section>
 
-        <section id="market" class="market-overview">
+            <div class="news-section">
+                <h2>最新新聞</h2>
+                <div class="news-grid" id="newsGrid">
+                    <!-- 新聞卡片將由 JavaScript 動態生成 -->
+                </div>
+            </div>
+        </div>
+
+        <section class="market-overview">
             <h2>市場概況</h2>
             <div class="market-stats">
                 <div class="stat-card">
@@ -60,11 +69,6 @@
             <div class="market-chart">
                 <canvas id="marketChart"></canvas>
             </div>
-        </section>
-
-        <section id="news" class="news">
-            <h2>最新新聞</h2>
-            <div class="news-grid" id="newsGrid"></div>
         </section>
 
         <section id="portfolio" class="portfolio">
