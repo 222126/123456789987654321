@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密貨幣詳細信息</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <i class="fas fa-coins"></i>
+                加密貨幣資訊網
+            </div>
+            <ul>
+                <li><a href="index.html"><i class="fas fa-home"></i> 返回首頁</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="crypto-detail-container">
+        <div class="crypto-detail-header">
+            <div class="crypto-info">
+                <i class="crypto-icon" id="cryptoIcon"></i>
+                <h1 id="cryptoName"></h1>
+                <span class="crypto-symbol" id="cryptoSymbol"></span>
+            </div>
+            <div class="crypto-price-info">
+                <div class="current-price">
+                    <span class="price" id="currentPrice"></span>
+                    <span class="change" id="priceChange"></span>
+                </div>
+                <div class="price-stats">
+                    <div class="stat">
+                        <span class="label">24h 高點</span>
+                        <span class="value" id="high24h"></span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">24h 低點</span>
+                        <span class="value" id="low24h"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="crypto-detail-content">
+            <div class="crypto-stats">
+                <div class="stat-card">
+                    <h3>市值</h3>
+                    <p id="marketCap"></p>
+                </div>
+                <div class="stat-card">
+                    <h3>24h 交易量</h3>
+                    <p id="volume24h"></p>
+                </div>
+                <div class="stat-card">
+                    <h3>FDV</h3>
+                    <p id="fdv"></p>
+                </div>
+                <div class="stat-card">
+                    <h3>Vol/Mkt Cap (24h)</h3>
+                    <p id="volMktCap"></p>
+                </div>
+                <div class="stat-card">
+                    <h3>總供給量</h3>
+                    <p id="totalSupply"></p>
+                </div>
+                <div class="stat-card">
+                    <h3>最大供給量</h3>
+                    <p id="maxSupply"></p>
+                </div>
+            </div>
+
+            <div class="crypto-charts">
+                <div class="chart-container">
+                    <h3>價格趨勢</h3>
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>交易量趨勢</h3>
+                    <canvas id="volumeChart"></canvas>
+                </div>
+            </div>
+
+            <div class="crypto-news">
+                <h3>相關新聞</h3>
+                <div class="news-list" id="relatedNews"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="crypto-detail.js"></script>
+</body>
+</html> 

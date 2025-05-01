@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密貨幣資訊網</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <i class="fas fa-coins"></i>
+                加密貨幣資訊網
+            </div>
+            <div class="search-container">
+                <input type="text" id="crypto-search" placeholder="搜索加密貨幣...">
+                <button onclick="searchCrypto()">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+            <ul>
+                <li><a href="#home" class="active"><i class="fas fa-home"></i> 首頁</a></li>
+                <li><a href="#market"><i class="fas fa-chart-line"></i> 市場</a></li>
+                <li><a href="#news"><i class="fas fa-newspaper"></i> 新聞</a></li>
+                <li><a href="#portfolio"><i class="fas fa-wallet"></i> 投資組合</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="home" class="hero">
+            <h1>即時加密貨幣行情</h1>
+            <p class="last-updated">Last Updated: Loading...</p>
+            <div class="crypto-grid" id="cryptoGrid">
+                <!-- 加密貨幣卡片將由 JavaScript 動態生成 -->
+            </div>
+        </section>
+
+        <section id="market" class="market-overview">
+            <h2>市場概況</h2>
+            <div class="market-stats">
+                <div class="stat-card">
+                    <i class="fas fa-globe"></i>
+                    <h3>總市值</h3>
+                    <p id="totalMarketCap">$0</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-exchange-alt"></i>
+                    <h3>24h 交易量</h3>
+                    <p id="totalVolume">$0</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fab fa-bitcoin"></i>
+                    <h3>比特幣主導率</h3>
+                    <p id="btcDominance">0%</p>
+                </div>
+            </div>
+            <div class="market-chart">
+                <canvas id="marketChart"></canvas>
+            </div>
+        </section>
+
+        <section id="news" class="news">
+            <h2>最新新聞</h2>
+            <div class="news-grid" id="newsGrid"></div>
+        </section>
+
+        <section id="portfolio" class="portfolio">
+            <h2>我的投資組合</h2>
+            <div class="portfolio-summary">
+                <div class="portfolio-value">
+                    <h3>總資產價值</h3>
+                    <p class="total-value">$0</p>
+                    <p class="change">+0% 今日</p>
+                </div>
+                <div class="portfolio-chart">
+                    <canvas id="portfolioChart"></canvas>
+                </div>
+            </div>
+            <div class="portfolio-assets">
+                <h3>資產明細</h3>
+                <table class="assets-table">
+                    <thead>
+                        <tr>
+                            <th>幣種</th>
+                            <th>持有數量</th>
+                            <th>價值</th>
+                            <th>24h 變化</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portfolioTableBody">
+                        <!-- 投資組合明細將由 JavaScript 動態生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>關於我們</h4>
+                <p>提供最即時的加密貨幣市場資訊和新聞</p>
+            </div>
+            <div class="footer-section">
+                <h4>快速連結</h4>
+                <ul>
+                    <li><a href="#home">首頁</a></li>
+                    <li><a href="#market">市場</a></li>
+                    <li><a href="#news">新聞</a></li>
+                    <li><a href="#portfolio">投資組合</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>關注我們</h4>
+                <div class="social-links">
+                    <a href="#"><i class="fab fa-twitter"></i></a>
+                    <a href="#"><i class="fab fa-facebook"></i></a>
+                    <a href="#"><i class="fab fa-telegram"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 加密貨幣資訊網. 保留所有權利.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+    <script>
+    // 格式化數字
+    function formatNumber(num) {
+        if (num >= 1e12) {
+            return `${(num / 1e12).toFixed(2)}T`;
+        } else if (num >= 1e9) {
+            return `${(num / 1e9).toFixed(2)}B`;
+        } else if (num >= 1e6) {
+            return `${(num / 1e6).toFixed(2)}M`;
+        } else if (num >= 1e3) {
+            return `${(num / 1e3).toFixed(2)}K`;
+        }
+        return num.toFixed(2);
+    }
+
+    // 加載新聞
+    function loadNews() {
+        fetch('news.json')
+            .then(res => res.json())
+            .then(newsList => {
+                const newsGrid = document.getElementById('newsGrid');
+                newsGrid.innerHTML = '';
+                newsList.forEach(news => {
+                    const shortSnippet = news.snippet.length > 100 ? 
+                        news.snippet.substring(0, 100) + '...' : 
+                        news.snippet;
+                    
+                    newsGrid.innerHTML += `
+                        <article class="news-card">
+                            <div class="news-image">
+                                <img src="${news.image_url}" alt="${news.title}" onerror="this.src='https://via.placeholder.com/300x200?text=Crypto+News'">
+                            </div>
+                            <div class="news-content">
+                                <a href="${news.link}" target="_blank">
+                                    <h3>${news.title}</h3>
+                                </a>
+                                <p class="news-snippet">${shortSnippet}</p>
+                                <div class="news-meta">
+                                    <span class="news-source">${news.source}</span>
+                                    <span class="news-date">${new Date(news.published_at * 1000).toLocaleDateString('zh-TW', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}</span>
+                                </div>
+                            </div>
+                        </article>
+                    `;
+                });
+            });
+    }
+
+    // 加載加密貨幣數據
+    function loadCryptoData() {
+        fetch('prices.json')
+            .then(response => response.json())
+            .then(data => {
+                const cryptoGrid = document.getElementById('cryptoGrid');
+                cryptoGrid.innerHTML = '';
+                
+                data.cryptos.forEach(crypto => {
+                    const changeClass = crypto.change24h >= 0 ? 'positive' : 'negative';
+                    const changeIcon = crypto.change24h >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                    
+                    cryptoGrid.innerHTML += `
+                        <div class="crypto-card" onclick="window.location.href='crypto-detail.html?symbol=${crypto.symbol}'">
+                            <div class="crypto-header">
+                                <i class="crypto-icon ${crypto.icon}"></i>
+                                <h2>${crypto.name} <span class="crypto-symbol">${crypto.symbol}</span></h2>
+                            </div>
+                            <div class="crypto-price">
+                                <span class="price">$${formatNumber(crypto.price)}</span>
+                                <span class="change ${changeClass}">
+                                    <i class="fas ${changeIcon}"></i>
+                                    ${Math.abs(crypto.change24h)}%
+                                </span>
+                            </div>
+                            <div class="crypto-details">
+                                <div class="volume">
+                                    <span>24h 交易量:</span>
+                                    <span>$${formatNumber(crypto.volume24h)}</span>
+                                </div>
+                                <div class="high-low">
+                                    <span>高: $${formatNumber(crypto.high24h)}</span>
+                                    <span>低: $${formatNumber(crypto.low24h)}</span>
+                                </div>
+                            </div>
+                            <div class="crypto-chart">
+                                <canvas id="chart-${crypto.symbol.toLowerCase()}"></canvas>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                // 更新市場概況
+                document.getElementById('totalMarketCap').textContent = `$${formatNumber(data.totalMarketCap)}`;
+                document.getElementById('totalVolume').textContent = `$${formatNumber(data.totalVolume)}`;
+                document.getElementById('btcDominance').textContent = `${data.btcDominance.toFixed(2)}%`;
+                
+                // 更新最後更新時間
+                document.querySelector('.last-updated').textContent = `最後更新: ${new Date().toLocaleTimeString('zh-TW')}`;
+                
+                // 初始化圖表
+                updateCharts(data.cryptos);
+            });
+    }
+
+    // 頁面加載時初始化
+    document.addEventListener('DOMContentLoaded', () => {
+        loadNews();
+        loadCryptoData();
+    });
+    </script>
+</body>
+</html> 
