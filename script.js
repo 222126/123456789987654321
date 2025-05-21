@@ -109,6 +109,113 @@ const cryptoNames = {
 // 圖表實例
 let priceChart = null;
 
+// 緩存數據
+let cachedData = null;
+let lastUpdateTime = 0;
+const CACHE_DURATION = 60000; // 緩存時間 1 分鐘
+
+// 虛擬滾動配置
+const ITEMS_PER_PAGE = 10;
+let currentPage = 1;
+let isLoading = false;
+let hasMore = true;
+
+// 骨架屏 HTML
+const skeletonCard = `
+    <div class="crypto-card skeleton">
+        <div class="crypto-header">
+            <div class="skeleton-icon"></div>
+            <div class="skeleton-text"></div>
+        </div>
+        <div class="crypto-price">
+            <div class="skeleton-text"></div>
+            <div class="skeleton-text"></div>
+        </div>
+        <div class="crypto-stats">
+            <div class="stat-item">
+                <div class="skeleton-text"></div>
+                <div class="skeleton-text"></div>
+            </div>
+            <div class="stat-item">
+                <div class="skeleton-text"></div>
+                <div class="skeleton-text"></div>
+            </div>
+        </div>
+    </div>
+`;
+
+// 添加骨架屏樣式
+const skeletonStyle = document.createElement('style');
+skeletonStyle.textContent = `
+    .skeleton {
+        animation: skeleton-loading 1s linear infinite alternate;
+    }
+
+    .skeleton-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--background-color);
+    }
+
+    .skeleton-text {
+        height: 16px;
+        margin: 8px 0;
+        border-radius: 4px;
+        background: var(--background-color);
+    }
+
+    @keyframes skeleton-loading {
+        0% {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        100% {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    }
+`;
+document.head.appendChild(skeletonStyle);
+
+// 預加載數據
+async function preloadData() {
+    try {
+        const [tickerResponse, priceResponse] = await Promise.all([
+            fetch('https://api.binance.com/api/v3/ticker/24hr'),
+            fetch('https://api.binance.com/api/v3/ticker/price')
+        ]);
+        
+        const [tickerData, priceData] = await Promise.all([
+            tickerResponse.json(),
+            priceResponse.json()
+        ]);
+
+        const priceMap = new Map(priceData.map(p => [p.symbol, parseFloat(p.price)]));
+        const usdtPairs = tickerData.filter(p => p.symbol.endsWith('USDT'));
+        
+        const mainCoins = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'SOL', 'DOT', 'MATIC', 'LINK'];
+        return usdtPairs
+            .filter(p => mainCoins.includes(p.symbol.replace('USDT', '')))
+            .map(p => {
+                const symbol = p.symbol.replace('USDT', '');
+                const price = priceMap.get(p.symbol) || 0;
+                const volume = parseFloat(p.volume) * price;
+                const marketCap = volume * 10;
+                return {
+                    symbol,
+                    price,
+                    volume,
+                    marketCap,
+                    priceChange: parseFloat(p.priceChangePercent),
+                    name: cryptoNames[symbol] || symbol,
+                    icon: cryptoIcons[symbol] || 'fas fa-coins'
+                };
+            });
+    } catch (error) {
+        console.error('預加載數據失敗:', error);
+        return [];
+    }
+}
+
 // 搜索功能
 function searchCrypto() {
     const searchInput = document.getElementById('crypto-search');
@@ -138,14 +245,19 @@ async function showCryptoDetail(symbol) {
     modal.style.display = 'block';
 
     try {
-        // 使用 Binance API 獲取詳細數據
+        // 顯示加載狀態
+        document.getElementById('modalCryptoName').textContent = '加載中...';
+        
+        // 並行請求詳細數據
         const [tickerResponse, klinesResponse] = await Promise.all([
             fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}USDT`),
             fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=1d&limit=30`)
         ]);
 
-        const tickerData = await tickerResponse.json();
-        const klinesData = await klinesResponse.json();
+        const [tickerData, klinesData] = await Promise.all([
+            tickerResponse.json(),
+            klinesResponse.json()
+        ]);
 
         // 更新模態框內容
         document.getElementById('modalCryptoName').textContent = `${cryptoNames[symbol.toUpperCase()] || symbol.toUpperCase()} (${symbol.toUpperCase()})`;
@@ -162,66 +274,10 @@ async function showCryptoDetail(symbol) {
         document.getElementById('modalMarketCap').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice) * 10)}`;
 
         // 更新圖表
-        const ctx = document.getElementById('priceChart').getContext('2d');
-        if (priceChart) {
-            priceChart.destroy();
-        }
-
-        const labels = klinesData.map(k => new Date(k[0]).toLocaleDateString('zh-TW'));
-        const values = klinesData.map(k => parseFloat(k[4])); // 收盤價
-
-        priceChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: '價格 (USD)',
-                    data: values,
-                    borderColor: values[values.length - 1] >= values[0] ? '#2ecc71' : '#e74c3c',
-                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: {
-                            label: function(context) {
-                                return `$${context.parsed.y.toLocaleString()}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            callback: function(value) {
-                                return '$' + value.toLocaleString();
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        updateChart(klinesData);
     } catch (error) {
         console.error('獲取詳細數據時發生錯誤:', error);
+        document.getElementById('modalCryptoName').textContent = '加載失敗';
     }
 }
 
@@ -231,102 +287,40 @@ async function updatePrices(retryCount = 0) {
     const cryptoGrid = document.getElementById('cryptoGrid');
     
     try {
-        // 顯示加載狀態
-        cryptoGrid.innerHTML = '<div class="loading">正在加載加密貨幣數據...</div>';
-        
-        // 使用 Binance API
-        const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // 檢查緩存
+        const now = Date.now();
+        if (cachedData && (now - lastUpdateTime) < CACHE_DURATION) {
+            renderCryptoCards(cachedData.slice(0, ITEMS_PER_PAGE));
+            return;
         }
 
-        const prices = await response.json();
+        // 顯示骨架屏
+        cryptoGrid.innerHTML = Array(ITEMS_PER_PAGE).fill(skeletonCard).join('');
         
-        if (!Array.isArray(prices) || prices.length === 0) {
-            throw new Error('Invalid data format received');
+        // 獲取數據
+        const data = await preloadData();
+        
+        if (data.length === 0) {
+            throw new Error('No data received');
         }
 
-        // 過濾出 USDT 交易對
-        const usdtPairs = prices.filter(p => p.symbol.endsWith('USDT'));
-        
-        // 獲取價格數據
-        const priceResponse = await fetch('https://api.binance.com/api/v3/ticker/price');
-        const priceData = await priceResponse.json();
-        const priceMap = new Map(priceData.map(p => [p.symbol, parseFloat(p.price)]));
+        // 更新緩存
+        cachedData = data;
+        lastUpdateTime = now;
 
-        cryptoGrid.innerHTML = '';
+        // 渲染第一頁數據
+        renderCryptoCards(data.slice(0, ITEMS_PER_PAGE));
         
-        let totalMarketCap = 0;
-        let totalVolume = 0;
-        let btcMarketCap = 0;
-        
-        // 只顯示主要的加密貨幣
-        const mainCoins = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'SOL', 'DOT', 'MATIC', 'LINK'];
-        
-        usdtPairs.forEach(crypto => {
-            const symbol = crypto.symbol.replace('USDT', '');
-            if (!mainCoins.includes(symbol)) return;
-
-            const price = priceMap.get(crypto.symbol) || 0;
-            const volume = parseFloat(crypto.volume) * price;
-            const marketCap = volume * 10; // 估算市值
-            
-            totalMarketCap += marketCap;
-            totalVolume += volume;
-            if (symbol === 'BTC') {
-                btcMarketCap = marketCap;
-            }
-            
-            const card = document.createElement('div');
-            card.className = 'crypto-card';
-            card.onclick = () => showCryptoDetail(symbol.toLowerCase());
-            
-            const iconClass = cryptoIcons[symbol] || 'fas fa-coins';
-            const name = cryptoNames[symbol] || symbol;
-            const priceChange = parseFloat(crypto.priceChangePercent);
-            
-            card.innerHTML = `
-                <div class="crypto-header">
-                    <i class="${iconClass}"></i>
-                    <h2>${name} <span class="crypto-symbol">${symbol}</span></h2>
-                </div>
-                <div class="crypto-price">
-                    <span class="price">$${price.toLocaleString()}</span>
-                    <span class="change ${priceChange >= 0 ? 'positive' : 'negative'}">
-                        <i class="fas fa-arrow-${priceChange >= 0 ? 'up' : 'down'}"></i>
-                        ${Math.abs(priceChange).toFixed(2)}%
-                    </span>
-                </div>
-                <div class="crypto-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">24h 交易量</span>
-                        <span class="stat-value">$${formatNumber(volume)}</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">市值</span>
-                        <span class="stat-value">$${formatNumber(marketCap)}</span>
-                    </div>
-                </div>
-            `;
-            
-            cryptoGrid.appendChild(card);
-        });
-        
-        // 更新市場概況
-        document.getElementById('totalMarketCap').textContent = `$${formatNumber(totalMarketCap)}`;
-        document.getElementById('totalVolume').textContent = `$${formatNumber(totalVolume)}`;
-        document.getElementById('btcDominance').textContent = `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
+        // 設置滾動監聽
+        setupInfiniteScroll();
         
     } catch (error) {
         console.error('更新價格時發生錯誤:', error);
         
         if (retryCount < maxRetries) {
-            // 重試
             console.log(`重試中... (${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => updatePrices(retryCount + 1), 2000); // 2秒後重試
+            setTimeout(() => updatePrices(retryCount + 1), 2000);
         } else {
-            // 顯示錯誤信息
             cryptoGrid.innerHTML = `
                 <div class="error-message">
                     <i class="fas fa-exclamation-circle"></i>
@@ -339,6 +333,183 @@ async function updatePrices(retryCount = 0) {
             `;
         }
     }
+}
+
+// 設置無限滾動
+function setupInfiniteScroll() {
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !isLoading && hasMore) {
+                loadMoreData();
+            }
+        });
+    }, {
+        root: null,
+        rootMargin: '20px',
+        threshold: 0.1
+    });
+
+    const sentinel = document.createElement('div');
+    sentinel.id = 'sentinel';
+    document.getElementById('cryptoGrid').appendChild(sentinel);
+    observer.observe(sentinel);
+}
+
+// 加載更多數據
+async function loadMoreData() {
+    if (!cachedData || isLoading) return;
+    
+    isLoading = true;
+    const cryptoGrid = document.getElementById('cryptoGrid');
+    const start = currentPage * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    
+    if (start >= cachedData.length) {
+        hasMore = false;
+        isLoading = false;
+        return;
+    }
+    
+    // 顯示加載狀態
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 加載中...';
+    cryptoGrid.appendChild(loadingIndicator);
+    
+    // 模擬加載延遲
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 移除加載指示器
+    loadingIndicator.remove();
+    
+    // 渲染新數據
+    const newData = cachedData.slice(start, end);
+    renderCryptoCards(newData, true);
+    
+    currentPage++;
+    isLoading = false;
+}
+
+// 渲染加密貨幣卡片
+function renderCryptoCards(data, append = false) {
+    const cryptoGrid = document.getElementById('cryptoGrid');
+    if (!append) {
+        cryptoGrid.innerHTML = '';
+    }
+    
+    let totalMarketCap = 0;
+    let totalVolume = 0;
+    let btcMarketCap = 0;
+
+    // 使用 DocumentFragment 提高性能
+    const fragment = document.createDocumentFragment();
+    
+    data.forEach(crypto => {
+        totalMarketCap += crypto.marketCap;
+        totalVolume += crypto.volume;
+        if (crypto.symbol === 'BTC') {
+            btcMarketCap = crypto.marketCap;
+        }
+        
+        const card = document.createElement('div');
+        card.className = 'crypto-card';
+        card.onclick = () => showCryptoDetail(crypto.symbol.toLowerCase());
+        
+        card.innerHTML = `
+            <div class="crypto-header">
+                <i class="${crypto.icon}"></i>
+                <h2>${crypto.name} <span class="crypto-symbol">${crypto.symbol}</span></h2>
+            </div>
+            <div class="crypto-price">
+                <span class="price">$${crypto.price.toLocaleString()}</span>
+                <span class="change ${crypto.priceChange >= 0 ? 'positive' : 'negative'}">
+                    <i class="fas fa-arrow-${crypto.priceChange >= 0 ? 'up' : 'down'}"></i>
+                    ${Math.abs(crypto.priceChange).toFixed(2)}%
+                </span>
+            </div>
+            <div class="crypto-stats">
+                <div class="stat-item">
+                    <span class="stat-label">24h 交易量</span>
+                    <span class="stat-value">$${formatNumber(crypto.volume)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">市值</span>
+                    <span class="stat-value">$${formatNumber(crypto.marketCap)}</span>
+                </div>
+            </div>
+        `;
+        
+        fragment.appendChild(card);
+    });
+    
+    cryptoGrid.appendChild(fragment);
+    
+    // 更新市場概況
+    document.getElementById('totalMarketCap').textContent = `$${formatNumber(totalMarketCap)}`;
+    document.getElementById('totalVolume').textContent = `$${formatNumber(totalVolume)}`;
+    document.getElementById('btcDominance').textContent = `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
+}
+
+// 更新圖表
+function updateChart(klinesData) {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    if (priceChart) {
+        priceChart.destroy();
+    }
+
+    const labels = klinesData.map(k => new Date(k[0]).toLocaleDateString('zh-TW'));
+    const values = klinesData.map(k => parseFloat(k[4])); // 收盤價
+
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '價格 (USD)',
+                data: values,
+                borderColor: values[values.length - 1] >= values[0] ? '#2ecc71' : '#e74c3c',
+                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return `$${context.parsed.y.toLocaleString()}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 // 添加加載和錯誤狀態的樣式
@@ -387,6 +558,26 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+// 添加加載指示器樣式
+const loadingStyle = document.createElement('style');
+loadingStyle.textContent = `
+    .loading-indicator {
+        text-align: center;
+        padding: 1rem;
+        color: var(--text-secondary);
+    }
+
+    .loading-indicator i {
+        margin-right: 0.5rem;
+    }
+
+    #sentinel {
+        height: 1px;
+        margin: 1rem 0;
+    }
+`;
+document.head.appendChild(loadingStyle);
 
 // 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
