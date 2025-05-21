@@ -30,22 +30,12 @@
     </header>
 
     <main>
-        <div class="content-wrapper">
-            <div class="crypto-section">
-                <h2>即時加密貨幣行情</h2>
-                <p class="last-updated">最後更新: Loading...</p>
-                <div class="crypto-grid" id="cryptoGrid">
-                    <!-- 加密貨幣卡片將由 JavaScript 動態生成 -->
-                </div>
+        <section class="crypto-section">
+            <h2>即時加密貨幣行情</h2>
+            <div class="crypto-grid" id="cryptoGrid">
+                <!-- 加密貨幣卡片將由 JavaScript 動態生成 -->
             </div>
-
-            <div class="news-section">
-                <h2>最新新聞</h2>
-                <div class="news-grid" id="newsGrid">
-                    <!-- 新聞卡片將由 JavaScript 動態生成 -->
-                </div>
-            </div>
-        </div>
+        </section>
 
         <section class="market-overview">
             <h2>市場概況</h2>
@@ -66,8 +56,12 @@
                     <p id="btcDominance">0%</p>
                 </div>
             </div>
-            <div class="market-chart">
-                <canvas id="marketChart"></canvas>
+        </section>
+
+        <section class="news-section">
+            <h2>最新新聞</h2>
+            <div class="news-grid" id="newsGrid">
+                <!-- 新聞卡片將由 JavaScript 動態生成 -->
             </div>
         </section>
 

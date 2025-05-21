@@ -129,100 +129,89 @@ function searchCrypto() {
     }
 }
 
-// Function to update cryptocurrency prices
-function updatePrices() {
-    fetch('prices.json')
-        .then(response => response.json())
-        .then(prices => {
-            const cryptoGrid = document.getElementById('cryptoGrid');
-            cryptoGrid.innerHTML = '';
+// 更新加密貨幣價格
+async function updatePrices() {
+    try {
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h');
+        const prices = await response.json();
+        
+        const cryptoGrid = document.getElementById('cryptoGrid');
+        cryptoGrid.innerHTML = '';
+        
+        let totalMarketCap = 0;
+        let totalVolume = 0;
+        let btcMarketCap = 0;
+        
+        prices.forEach(crypto => {
+            totalMarketCap += crypto.market_cap;
+            totalVolume += crypto.total_volume;
+            if (crypto.symbol.toUpperCase() === 'BTC') {
+                btcMarketCap = crypto.market_cap;
+            }
             
-            let totalMarketCap = 0;
-            let totalVolume = 0;
-            let btcMarketCap = 0;
+            const card = document.createElement('div');
+            card.className = 'crypto-card';
             
-            prices.forEach(crypto => {
-                totalMarketCap += crypto.market_cap;
-                totalVolume += crypto.volume_24h;
-                if (crypto.symbol === 'BTC') {
-                    btcMarketCap = crypto.market_cap;
-                }
-                
-                const card = document.createElement('div');
-                card.className = 'crypto-card';
-                
-                const iconClass = cryptoIcons[crypto.symbol] || 'fas fa-coins';
-                const name = cryptoNames[crypto.symbol] || crypto.symbol;
-                
-                card.innerHTML = `
-                    <div class="crypto-icon">
-                        <i class="${iconClass}"></i>
+            const iconClass = cryptoIcons[crypto.symbol.toUpperCase()] || 'fas fa-coins';
+            const name = cryptoNames[crypto.symbol.toUpperCase()] || crypto.name;
+            
+            card.innerHTML = `
+                <div class="crypto-header">
+                    <i class="${iconClass}"></i>
+                    <h2>${name} <span class="crypto-symbol">${crypto.symbol.toUpperCase()}</span></h2>
+                </div>
+                <div class="crypto-price">
+                    <span class="price">$${crypto.current_price.toLocaleString()}</span>
+                    <span class="change ${crypto.price_change_percentage_24h >= 0 ? 'positive' : 'negative'}">
+                        <i class="fas fa-arrow-${crypto.price_change_percentage_24h >= 0 ? 'up' : 'down'}"></i>
+                        ${Math.abs(crypto.price_change_percentage_24h).toFixed(2)}%
+                    </span>
+                </div>
+                <div class="crypto-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">24h 交易量</span>
+                        <span class="stat-value">$${formatNumber(crypto.total_volume)}</span>
                     </div>
-                    <h2>${name} (${crypto.symbol})</h2>
-                    <p class="price">$${crypto.price.toLocaleString()}</p>
-                    <p class="change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
-                        <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i> 
-                        ${Math.abs(crypto.change_24h).toFixed(2)}%
-                    </p>
-                    <p class="volume">24h Volume: $${crypto.volume_24h.toLocaleString()}</p>
-                    <p class="high-low">
-                        High: $${crypto.high_24h.toLocaleString()} | 
-                        Low: $${crypto.low_24h.toLocaleString()}
-                    </p>
-                    <div class="crypto-chart">
-                        <canvas id="${crypto.symbol.toLowerCase()}Chart"></canvas>
+                    <div class="stat-item">
+                        <span class="stat-label">市值</span>
+                        <span class="stat-value">$${formatNumber(crypto.market_cap)}</span>
                     </div>
-                `;
-                
-                cryptoGrid.appendChild(card);
-                
-                // Initialize chart
-                const ctx = card.querySelector('canvas').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
-                        datasets: [{
-                            data: Array(6).fill().map(() => crypto.price * (1 + (Math.random() - 0.5) * 0.1)),
-                            borderColor: crypto.change_24h >= 0 ? '#2ecc71' : '#e74c3c',
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        },
-                        scales: {
-                            x: { display: false },
-                            y: { display: false }
-                        }
-                    }
-                });
-            });
+                </div>
+            `;
             
-            // Update market stats
-            document.getElementById('totalMarketCap').textContent = 
-                `$${(totalMarketCap / 1e12).toFixed(2)}T`;
-            document.getElementById('totalVolume').textContent = 
-                `$${(totalVolume / 1e9).toFixed(2)}B`;
-            document.getElementById('btcDominance').textContent = 
-                `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
-            
-            // Update timestamp
-            document.querySelector('.last-updated').textContent = 
-                `Last Updated: ${new Date().toLocaleString()}`;
-        })
-        .catch(error => console.error('Error updating prices:', error));
+            cryptoGrid.appendChild(card);
+        });
+        
+        // 更新市場概況
+        document.getElementById('totalMarketCap').textContent = `$${formatNumber(totalMarketCap)}`;
+        document.getElementById('totalVolume').textContent = `$${formatNumber(totalVolume)}`;
+        document.getElementById('btcDominance').textContent = `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
+        
+    } catch (error) {
+        console.error('更新價格時發生錯誤:', error);
+        document.getElementById('cryptoGrid').innerHTML = '<p>無法加載加密貨幣數據，請稍後再試。</p>';
+    }
 }
 
-// Initialize everything when page loads
+// 格式化數字
+function formatNumber(num) {
+    if (num >= 1e12) {
+        return `${(num / 1e12).toFixed(2)}T`;
+    } else if (num >= 1e9) {
+        return `${(num / 1e9).toFixed(2)}B`;
+    } else if (num >= 1e6) {
+        return `${(num / 1e6).toFixed(2)}M`;
+    } else if (num >= 1e3) {
+        return `${(num / 1e3).toFixed(2)}K`;
+    }
+    return num.toFixed(2);
+}
+
+// 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
     updatePrices();
-    setInterval(updatePrices, 60000); // Update prices every minute
+    // 每分鐘更新一次價格
+    setInterval(updatePrices, 60000);
 });
 
 // 導航欄活動狀態
