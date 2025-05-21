@@ -106,6 +106,9 @@ const cryptoNames = {
     'XTZ': 'Tezos'
 };
 
+// 圖表實例
+let priceChart = null;
+
 // 搜索功能
 function searchCrypto() {
     const searchInput = document.getElementById('crypto-search');
@@ -126,6 +129,113 @@ function searchCrypto() {
     } else {
         const cards = document.getElementsByClassName('crypto-card');
         Array.from(cards).forEach(card => card.style.display = '');
+    }
+}
+
+// 顯示詳細資料
+async function showCryptoDetail(cryptoId) {
+    const modal = document.getElementById('cryptoDetailModal');
+    modal.style.display = 'block';
+
+    try {
+        // 獲取詳細數據
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${cryptoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`);
+        const data = await response.json();
+
+        // 更新模態框內容
+        document.getElementById('modalCryptoName').textContent = `${data.name} (${data.symbol.toUpperCase()})`;
+        document.getElementById('modalCurrentPrice').textContent = `$${data.market_data.current_price.usd.toLocaleString()}`;
+        
+        const priceChange = data.market_data.price_change_percentage_24h;
+        const priceChangeElement = document.getElementById('modalPriceChange');
+        priceChangeElement.textContent = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
+        priceChangeElement.className = priceChange >= 0 ? 'positive' : 'negative';
+
+        document.getElementById('modalHigh24h').textContent = `$${data.market_data.high_24h.usd.toLocaleString()}`;
+        document.getElementById('modalLow24h').textContent = `$${data.market_data.low_24h.usd.toLocaleString()}`;
+        document.getElementById('modalVolume24h').textContent = `$${data.market_data.total_volume.usd.toLocaleString()}`;
+        document.getElementById('modalMarketCap').textContent = `$${data.market_data.market_cap.usd.toLocaleString()}`;
+
+        // 獲取價格歷史數據並繪製圖表
+        await updateChart(cryptoId, '24h');
+    } catch (error) {
+        console.error('獲取詳細數據時發生錯誤:', error);
+    }
+}
+
+// 更新圖表
+async function updateChart(cryptoId, period) {
+    try {
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${cryptoId}/market_chart?vs_currency=usd&days=${period === '24h' ? '1' : period === '7d' ? '7' : period === '30d' ? '30' : '365'}`);
+        const data = await response.json();
+
+        const prices = data.prices;
+        const labels = prices.map(price => {
+            const date = new Date(price[0]);
+            return period === '24h' 
+                ? date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+                : date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+        });
+        const values = prices.map(price => price[1]);
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+
+        if (priceChart) {
+            priceChart.destroy();
+        }
+
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '價格 (USD)',
+                    data: values,
+                    borderColor: values[values.length - 1] >= values[0] ? '#2ecc71' : '#e74c3c',
+                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `$${context.parsed.y.toLocaleString()}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('更新圖表時發生錯誤:', error);
     }
 }
 
@@ -151,6 +261,7 @@ async function updatePrices() {
             
             const card = document.createElement('div');
             card.className = 'crypto-card';
+            card.onclick = () => showCryptoDetail(crypto.id);
             
             const iconClass = cryptoIcons[crypto.symbol.toUpperCase()] || 'fas fa-coins';
             const name = cryptoNames[crypto.symbol.toUpperCase()] || crypto.name;
@@ -212,6 +323,30 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePrices();
     // 每分鐘更新一次價格
     setInterval(updatePrices, 60000);
+
+    // 關閉模態框
+    const modal = document.getElementById('cryptoDetailModal');
+    const closeBtn = document.querySelector('.close');
+    
+    closeBtn.onclick = () => {
+        modal.style.display = 'none';
+    };
+    
+    window.onclick = (event) => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+
+    // 時間範圍按鈕點擊事件
+    document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const cryptoId = document.getElementById('modalCryptoName').textContent.split('(')[1].split(')')[0].toLowerCase();
+            updateChart(cryptoId, this.dataset.period);
+        });
+    });
 });
 
 // 導航欄活動狀態

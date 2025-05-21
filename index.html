@@ -125,6 +125,51 @@
         </div>
     </footer>
 
+    <!-- 詳細資料彈出視窗 -->
+    <div id="cryptoDetailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalCryptoName"></h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="price-info">
+                    <div class="current-price">
+                        <span id="modalCurrentPrice"></span>
+                        <span id="modalPriceChange"></span>
+                    </div>
+                    <div class="price-stats">
+                        <div class="stat">
+                            <span class="label">24h 高點</span>
+                            <span id="modalHigh24h"></span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">24h 低點</span>
+                            <span id="modalLow24h"></span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">24h 交易量</span>
+                            <span id="modalVolume24h"></span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">市值</span>
+                            <span id="modalMarketCap"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="time-filters">
+                    <button class="time-btn active" data-period="24h">24H</button>
+                    <button class="time-btn" data-period="7d">7D</button>
+                    <button class="time-btn" data-period="30d">30D</button>
+                    <button class="time-btn" data-period="1y">1Y</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
     <script>
