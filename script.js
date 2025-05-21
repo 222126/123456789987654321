@@ -176,44 +176,148 @@ skeletonStyle.textContent = `
 `;
 document.head.appendChild(skeletonStyle);
 
+// API 配置
+const API_CONFIG = {
+    primary: {
+        baseUrl: 'https://api.binance.com/api/v3',
+        endpoints: {
+            ticker: '/ticker/24hr',
+            price: '/ticker/price',
+            klines: '/klines'
+        }
+    },
+    backup: {
+        baseUrl: 'https://api.coingecko.com/api/v3',
+        endpoints: {
+            ticker: '/coins/markets',
+            price: '/simple/price',
+            klines: '/coins'
+        }
+    }
+};
+
+// 錯誤處理
+class APIError extends Error {
+    constructor(message, status, data) {
+        super(message);
+        this.name = 'APIError';
+        this.status = status;
+        this.data = data;
+    }
+}
+
+// 檢查 API 可用性
+async function checkAPIHealth(api) {
+    try {
+        const response = await fetch(`${api.baseUrl}${api.endpoints.ticker}`);
+        return response.ok;
+    } catch {
+        return false;
+    }
+}
+
+// 獲取數據（帶重試和備用）
+async function fetchWithRetry(url, options = {}, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Accept': 'application/json',
+                    ...options.headers
+                }
+            });
+
+            if (!response.ok) {
+                throw new APIError(`HTTP error! status: ${response.status}`, response.status);
+            }
+
+            return await response.json();
+        } catch (error) {
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+        }
+    }
+}
+
 // 預加載數據
 async function preloadData() {
     try {
-        const [tickerResponse, priceResponse] = await Promise.all([
-            fetch('https://api.binance.com/api/v3/ticker/24hr'),
-            fetch('https://api.binance.com/api/v3/ticker/price')
-        ]);
-        
-        const [tickerData, priceData] = await Promise.all([
-            tickerResponse.json(),
-            priceResponse.json()
-        ]);
+        // 檢查主要 API 是否可用
+        const isPrimaryAvailable = await checkAPIHealth(API_CONFIG.primary);
+        const api = isPrimaryAvailable ? API_CONFIG.primary : API_CONFIG.backup;
 
-        const priceMap = new Map(priceData.map(p => [p.symbol, parseFloat(p.price)]));
-        const usdtPairs = tickerData.filter(p => p.symbol.endsWith('USDT'));
-        
-        const mainCoins = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'SOL', 'DOT', 'MATIC', 'LINK'];
-        return usdtPairs
-            .filter(p => mainCoins.includes(p.symbol.replace('USDT', '')))
-            .map(p => {
-                const symbol = p.symbol.replace('USDT', '');
-                const price = priceMap.get(p.symbol) || 0;
-                const volume = parseFloat(p.volume) * price;
-                const marketCap = volume * 10;
-                return {
-                    symbol,
-                    price,
-                    volume,
-                    marketCap,
-                    priceChange: parseFloat(p.priceChangePercent),
-                    name: cryptoNames[symbol] || symbol,
-                    icon: cryptoIcons[symbol] || 'fas fa-coins'
-                };
-            });
+        if (api === API_CONFIG.primary) {
+            // 使用 Binance API
+            const [tickerData, priceData] = await Promise.all([
+                fetchWithRetry(`${api.baseUrl}${api.endpoints.ticker}`),
+                fetchWithRetry(`${api.baseUrl}${api.endpoints.price}`)
+            ]);
+
+            const priceMap = new Map(priceData.map(p => [p.symbol, parseFloat(p.price)]));
+            const usdtPairs = tickerData.filter(p => p.symbol.endsWith('USDT'));
+            
+            return processBinanceData(usdtPairs, priceMap);
+        } else {
+            // 使用 CoinGecko API
+            const tickerData = await fetchWithRetry(
+                `${api.baseUrl}${api.endpoints.ticker}?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h`
+            );
+            
+            return processCoinGeckoData(tickerData);
+        }
     } catch (error) {
         console.error('預加載數據失敗:', error);
-        return [];
+        
+        // 嘗試從本地存儲加載緩存數據
+        const cachedData = localStorage.getItem('cryptoData');
+        if (cachedData) {
+            const { data, timestamp } = JSON.parse(cachedData);
+            if (Date.now() - timestamp < 3600000) { // 1小時內的緩存
+                return data;
+            }
+        }
+        
+        throw error;
     }
+}
+
+// 處理 Binance 數據
+function processBinanceData(tickerData, priceMap) {
+    const mainCoins = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'SOL', 'DOT', 'MATIC', 'LINK'];
+    return tickerData
+        .filter(p => mainCoins.includes(p.symbol.replace('USDT', '')))
+        .map(p => {
+            const symbol = p.symbol.replace('USDT', '');
+            const price = priceMap.get(p.symbol) || 0;
+            const volume = parseFloat(p.volume) * price;
+            const marketCap = volume * 10;
+            return {
+                symbol,
+                price,
+                volume,
+                marketCap,
+                priceChange: parseFloat(p.priceChangePercent),
+                name: cryptoNames[symbol] || symbol,
+                icon: cryptoIcons[symbol] || 'fas fa-coins'
+            };
+        });
+}
+
+// 處理 CoinGecko 數據
+function processCoinGeckoData(data) {
+    const mainCoins = ['bitcoin', 'ethereum', 'binancecoin', 'ripple', 'cardano', 'dogecoin', 'solana', 'polkadot', 'matic-network', 'chainlink'];
+    return data
+        .filter(coin => mainCoins.includes(coin.id))
+        .map(coin => ({
+            symbol: coin.symbol.toUpperCase(),
+            price: coin.current_price,
+            volume: coin.total_volume,
+            marketCap: coin.market_cap,
+            priceChange: coin.price_change_percentage_24h,
+            name: cryptoNames[coin.symbol.toUpperCase()] || coin.name,
+            icon: cryptoIcons[coin.symbol.toUpperCase()] || 'fas fa-coins'
+        }));
 }
 
 // 搜索功能
@@ -308,6 +412,12 @@ async function updatePrices(retryCount = 0) {
         cachedData = data;
         lastUpdateTime = now;
 
+        // 保存到本地存儲
+        localStorage.setItem('cryptoData', JSON.stringify({
+            data,
+            timestamp: now
+        }));
+
         // 渲染第一頁數據
         renderCryptoCards(data.slice(0, ITEMS_PER_PAGE));
         
@@ -319,16 +429,22 @@ async function updatePrices(retryCount = 0) {
         
         if (retryCount < maxRetries) {
             console.log(`重試中... (${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => updatePrices(retryCount + 1), 2000);
+            setTimeout(() => updatePrices(retryCount + 1), Math.pow(2, retryCount) * 1000);
         } else {
+            // 顯示錯誤信息
             cryptoGrid.innerHTML = `
                 <div class="error-message">
                     <i class="fas fa-exclamation-circle"></i>
                     <p>無法加載加密貨幣數據</p>
-                    <p class="error-details">請檢查您的網絡連接或稍後再試</p>
-                    <button onclick="updatePrices()" class="retry-button">
-                        <i class="fas fa-sync-alt"></i> 重試
-                    </button>
+                    <p class="error-details">${error.message}</p>
+                    <div class="error-actions">
+                        <button onclick="updatePrices()" class="retry-button">
+                            <i class="fas fa-sync-alt"></i> 重試
+                        </button>
+                        <button onclick="window.location.reload()" class="retry-button">
+                            <i class="fas fa-redo"></i> 刷新頁面
+                        </button>
+                    </div>
                 </div>
             `;
         }
