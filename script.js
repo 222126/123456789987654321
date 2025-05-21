@@ -351,230 +351,136 @@ async function showCryptoDetail(symbol) {
     try {
         // 顯示加載狀態
         document.getElementById('modalCryptoName').textContent = '加載中...';
+        document.getElementById('modalCurrentPrice').textContent = '--';
+        document.getElementById('modalPriceChange').textContent = '--';
+        document.getElementById('modalHigh24h').textContent = '--';
+        document.getElementById('modalLow24h').textContent = '--';
+        document.getElementById('modalVolume24h').textContent = '--';
+        document.getElementById('modalMarketCap').textContent = '--';
         
-        // 並行請求詳細數據
-        const [tickerResponse, klinesResponse] = await Promise.all([
-            fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}USDT`),
-            fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=1d&limit=30`)
-        ]);
+        // 禁用時間範圍按鈕
+        document.querySelectorAll('.time-btn').forEach(btn => btn.disabled = true);
+        
+        // 檢查 API 可用性
+        const isPrimaryAvailable = await checkAPIHealth(API_CONFIG.primary);
+        const api = isPrimaryAvailable ? API_CONFIG.primary : API_CONFIG.backup;
 
-        const [tickerData, klinesData] = await Promise.all([
-            tickerResponse.json(),
-            klinesResponse.json()
-        ]);
+        let tickerData, klinesData;
+
+        if (api === API_CONFIG.primary) {
+            // 使用 Binance API
+            [tickerData, klinesData] = await Promise.all([
+                fetchWithRetry(`${api.baseUrl}${api.endpoints.ticker}?symbol=${symbol}USDT`),
+                fetchWithRetry(`${api.baseUrl}${api.endpoints.klines}?symbol=${symbol}USDT&interval=1d&limit=30`)
+            ]);
+        } else {
+            // 使用 CoinGecko API
+            const coinId = getCoinGeckoId(symbol);
+            [tickerData, klinesData] = await Promise.all([
+                fetchWithRetry(`${api.baseUrl}/coins/${coinId}`),
+                fetchWithRetry(`${api.baseUrl}/coins/${coinId}/market_chart?vs_currency=usd&days=30&interval=daily`)
+            ]);
+        }
 
         // 更新模態框內容
-        document.getElementById('modalCryptoName').textContent = `${cryptoNames[symbol.toUpperCase()] || symbol.toUpperCase()} (${symbol.toUpperCase()})`;
-        document.getElementById('modalCurrentPrice').textContent = `$${parseFloat(tickerData.lastPrice).toLocaleString()}`;
+        const cryptoName = cryptoNames[symbol.toUpperCase()] || symbol.toUpperCase();
+        document.getElementById('modalCryptoName').textContent = `${cryptoName} (${symbol.toUpperCase()})`;
+
+        if (api === API_CONFIG.primary) {
+            // 處理 Binance 數據
+            document.getElementById('modalCurrentPrice').textContent = `$${parseFloat(tickerData.lastPrice).toLocaleString()}`;
+            
+            const priceChange = parseFloat(tickerData.priceChangePercent);
+            const priceChangeElement = document.getElementById('modalPriceChange');
+            priceChangeElement.textContent = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
+            priceChangeElement.className = priceChange >= 0 ? 'positive' : 'negative';
+
+            document.getElementById('modalHigh24h').textContent = `$${parseFloat(tickerData.highPrice).toLocaleString()}`;
+            document.getElementById('modalLow24h').textContent = `$${parseFloat(tickerData.lowPrice).toLocaleString()}`;
+            document.getElementById('modalVolume24h').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice))}`;
+            document.getElementById('modalMarketCap').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice) * 10)}`;
+
+            // 更新圖表
+            updateChart(klinesData.map(k => ({
+                date: new Date(k[0]),
+                price: parseFloat(k[4])
+            })));
+        } else {
+            // 處理 CoinGecko 數據
+            document.getElementById('modalCurrentPrice').textContent = `$${tickerData.market_data.current_price.usd.toLocaleString()}`;
+            
+            const priceChange = tickerData.market_data.price_change_percentage_24h;
+            const priceChangeElement = document.getElementById('modalPriceChange');
+            priceChangeElement.textContent = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
+            priceChangeElement.className = priceChange >= 0 ? 'positive' : 'negative';
+
+            document.getElementById('modalHigh24h').textContent = `$${tickerData.market_data.high_24h.usd.toLocaleString()}`;
+            document.getElementById('modalLow24h').textContent = `$${tickerData.market_data.low_24h.usd.toLocaleString()}`;
+            document.getElementById('modalVolume24h').textContent = `$${formatNumber(tickerData.market_data.total_volume.usd)}`;
+            document.getElementById('modalMarketCap').textContent = `$${formatNumber(tickerData.market_data.market_cap.usd)}`;
+
+            // 更新圖表
+            const prices = klinesData.prices.map(([timestamp, price]) => ({
+                date: new Date(timestamp),
+                price: price
+            }));
+            updateChart(prices);
+        }
+
+        // 啟用時間範圍按鈕
+        document.querySelectorAll('.time-btn').forEach(btn => btn.disabled = false);
         
-        const priceChange = parseFloat(tickerData.priceChangePercent);
-        const priceChangeElement = document.getElementById('modalPriceChange');
-        priceChangeElement.textContent = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
-        priceChangeElement.className = priceChange >= 0 ? 'positive' : 'negative';
-
-        document.getElementById('modalHigh24h').textContent = `$${parseFloat(tickerData.highPrice).toLocaleString()}`;
-        document.getElementById('modalLow24h').textContent = `$${parseFloat(tickerData.lowPrice).toLocaleString()}`;
-        document.getElementById('modalVolume24h').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice))}`;
-        document.getElementById('modalMarketCap').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice) * 10)}`;
-
-        // 更新圖表
-        updateChart(klinesData);
     } catch (error) {
         console.error('獲取詳細數據時發生錯誤:', error);
         document.getElementById('modalCryptoName').textContent = '加載失敗';
-    }
-}
-
-// 更新加密貨幣價格
-async function updatePrices(retryCount = 0) {
-    const maxRetries = 3;
-    const cryptoGrid = document.getElementById('cryptoGrid');
-    
-    try {
-        // 檢查緩存
-        const now = Date.now();
-        if (cachedData && (now - lastUpdateTime) < CACHE_DURATION) {
-            renderCryptoCards(cachedData.slice(0, ITEMS_PER_PAGE));
-            return;
-        }
-
-        // 顯示骨架屏
-        cryptoGrid.innerHTML = Array(ITEMS_PER_PAGE).fill(skeletonCard).join('');
+        document.getElementById('modalCurrentPrice').textContent = '--';
+        document.getElementById('modalPriceChange').textContent = '--';
+        document.getElementById('modalHigh24h').textContent = '--';
+        document.getElementById('modalLow24h').textContent = '--';
+        document.getElementById('modalVolume24h').textContent = '--';
+        document.getElementById('modalMarketCap').textContent = '--';
         
-        // 獲取數據
-        const data = await preloadData();
-        
-        if (data.length === 0) {
-            throw new Error('No data received');
-        }
-
-        // 更新緩存
-        cachedData = data;
-        lastUpdateTime = now;
-
-        // 保存到本地存儲
-        localStorage.setItem('cryptoData', JSON.stringify({
-            data,
-            timestamp: now
-        }));
-
-        // 渲染第一頁數據
-        renderCryptoCards(data.slice(0, ITEMS_PER_PAGE));
-        
-        // 設置滾動監聽
-        setupInfiniteScroll();
-        
-    } catch (error) {
-        console.error('更新價格時發生錯誤:', error);
-        
-        if (retryCount < maxRetries) {
-            console.log(`重試中... (${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => updatePrices(retryCount + 1), Math.pow(2, retryCount) * 1000);
-        } else {
-            // 顯示錯誤信息
-            cryptoGrid.innerHTML = `
-                <div class="error-message">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <p>無法加載加密貨幣數據</p>
-                    <p class="error-details">${error.message}</p>
-                    <div class="error-actions">
-                        <button onclick="updatePrices()" class="retry-button">
-                            <i class="fas fa-sync-alt"></i> 重試
-                        </button>
-                        <button onclick="window.location.reload()" class="retry-button">
-                            <i class="fas fa-redo"></i> 刷新頁面
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-    }
-}
-
-// 設置無限滾動
-function setupInfiniteScroll() {
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting && !isLoading && hasMore) {
-                loadMoreData();
-            }
-        });
-    }, {
-        root: null,
-        rootMargin: '20px',
-        threshold: 0.1
-    });
-
-    const sentinel = document.createElement('div');
-    sentinel.id = 'sentinel';
-    document.getElementById('cryptoGrid').appendChild(sentinel);
-    observer.observe(sentinel);
-}
-
-// 加載更多數據
-async function loadMoreData() {
-    if (!cachedData || isLoading) return;
-    
-    isLoading = true;
-    const cryptoGrid = document.getElementById('cryptoGrid');
-    const start = currentPage * ITEMS_PER_PAGE;
-    const end = start + ITEMS_PER_PAGE;
-    
-    if (start >= cachedData.length) {
-        hasMore = false;
-        isLoading = false;
-        return;
-    }
-    
-    // 顯示加載狀態
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.className = 'loading-indicator';
-    loadingIndicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 加載中...';
-    cryptoGrid.appendChild(loadingIndicator);
-    
-    // 模擬加載延遲
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // 移除加載指示器
-    loadingIndicator.remove();
-    
-    // 渲染新數據
-    const newData = cachedData.slice(start, end);
-    renderCryptoCards(newData, true);
-    
-    currentPage++;
-    isLoading = false;
-}
-
-// 渲染加密貨幣卡片
-function renderCryptoCards(data, append = false) {
-    const cryptoGrid = document.getElementById('cryptoGrid');
-    if (!append) {
-        cryptoGrid.innerHTML = '';
-    }
-    
-    let totalMarketCap = 0;
-    let totalVolume = 0;
-    let btcMarketCap = 0;
-
-    // 使用 DocumentFragment 提高性能
-    const fragment = document.createDocumentFragment();
-    
-    data.forEach(crypto => {
-        totalMarketCap += crypto.marketCap;
-        totalVolume += crypto.volume;
-        if (crypto.symbol === 'BTC') {
-            btcMarketCap = crypto.marketCap;
-        }
-        
-        const card = document.createElement('div');
-        card.className = 'crypto-card';
-        card.onclick = () => showCryptoDetail(crypto.symbol.toLowerCase());
-        
-        card.innerHTML = `
-            <div class="crypto-header">
-                <i class="${crypto.icon}"></i>
-                <h2>${crypto.name} <span class="crypto-symbol">${crypto.symbol}</span></h2>
-            </div>
-            <div class="crypto-price">
-                <span class="price">$${crypto.price.toLocaleString()}</span>
-                <span class="change ${crypto.priceChange >= 0 ? 'positive' : 'negative'}">
-                    <i class="fas fa-arrow-${crypto.priceChange >= 0 ? 'up' : 'down'}"></i>
-                    ${Math.abs(crypto.priceChange).toFixed(2)}%
-                </span>
-            </div>
-            <div class="crypto-stats">
-                <div class="stat-item">
-                    <span class="stat-label">24h 交易量</span>
-                    <span class="stat-value">$${formatNumber(crypto.volume)}</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">市值</span>
-                    <span class="stat-value">$${formatNumber(crypto.marketCap)}</span>
-                </div>
+        // 顯示錯誤信息
+        const chartContainer = document.querySelector('.chart-container');
+        chartContainer.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>無法加載詳細數據</p>
+                <p class="error-details">${error.message}</p>
+                <button onclick="showCryptoDetail('${symbol}')" class="retry-button">
+                    <i class="fas fa-sync-alt"></i> 重試
+                </button>
             </div>
         `;
-        
-        fragment.appendChild(card);
-    });
-    
-    cryptoGrid.appendChild(fragment);
-    
-    // 更新市場概況
-    document.getElementById('totalMarketCap').textContent = `$${formatNumber(totalMarketCap)}`;
-    document.getElementById('totalVolume').textContent = `$${formatNumber(totalVolume)}`;
-    document.getElementById('btcDominance').textContent = `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
+    }
+}
+
+// 獲取 CoinGecko ID
+function getCoinGeckoId(symbol) {
+    const coinMap = {
+        'BTC': 'bitcoin',
+        'ETH': 'ethereum',
+        'BNB': 'binancecoin',
+        'XRP': 'ripple',
+        'ADA': 'cardano',
+        'DOGE': 'dogecoin',
+        'SOL': 'solana',
+        'DOT': 'polkadot',
+        'MATIC': 'matic-network',
+        'LINK': 'chainlink'
+    };
+    return coinMap[symbol.toUpperCase()] || symbol.toLowerCase();
 }
 
 // 更新圖表
-function updateChart(klinesData) {
+function updateChart(data) {
     const ctx = document.getElementById('priceChart').getContext('2d');
     if (priceChart) {
         priceChart.destroy();
     }
 
-    const labels = klinesData.map(k => new Date(k[0]).toLocaleDateString('zh-TW'));
-    const values = klinesData.map(k => parseFloat(k[4])); // 收盤價
+    const labels = data.map(d => d.date.toLocaleDateString('zh-TW'));
+    const values = data.map(d => d.price);
 
     priceChart = new Chart(ctx, {
         type: 'line',
@@ -694,6 +600,31 @@ loadingStyle.textContent = `
     }
 `;
 document.head.appendChild(loadingStyle);
+
+// 添加時間範圍按鈕樣式
+const timeButtonStyle = document.createElement('style');
+timeButtonStyle.textContent = `
+    .time-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .chart-container .error-message {
+        padding: 2rem;
+        text-align: center;
+    }
+
+    .chart-container .error-message i {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .chart-container .error-details {
+        color: var(--text-secondary);
+        margin: 0.5rem 0 1rem;
+    }
+`;
+document.head.appendChild(timeButtonStyle);
 
 // 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
