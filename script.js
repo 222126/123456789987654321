@@ -133,56 +133,42 @@ function searchCrypto() {
 }
 
 // 顯示詳細資料
-async function showCryptoDetail(cryptoId) {
+async function showCryptoDetail(symbol) {
     const modal = document.getElementById('cryptoDetailModal');
     modal.style.display = 'block';
 
     try {
-        // 獲取詳細數據
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${cryptoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`);
-        const data = await response.json();
+        // 使用 Binance API 獲取詳細數據
+        const [tickerResponse, klinesResponse] = await Promise.all([
+            fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}USDT`),
+            fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=1d&limit=30`)
+        ]);
+
+        const tickerData = await tickerResponse.json();
+        const klinesData = await klinesResponse.json();
 
         // 更新模態框內容
-        document.getElementById('modalCryptoName').textContent = `${data.name} (${data.symbol.toUpperCase()})`;
-        document.getElementById('modalCurrentPrice').textContent = `$${data.market_data.current_price.usd.toLocaleString()}`;
+        document.getElementById('modalCryptoName').textContent = `${cryptoNames[symbol.toUpperCase()] || symbol.toUpperCase()} (${symbol.toUpperCase()})`;
+        document.getElementById('modalCurrentPrice').textContent = `$${parseFloat(tickerData.lastPrice).toLocaleString()}`;
         
-        const priceChange = data.market_data.price_change_percentage_24h;
+        const priceChange = parseFloat(tickerData.priceChangePercent);
         const priceChangeElement = document.getElementById('modalPriceChange');
         priceChangeElement.textContent = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
         priceChangeElement.className = priceChange >= 0 ? 'positive' : 'negative';
 
-        document.getElementById('modalHigh24h').textContent = `$${data.market_data.high_24h.usd.toLocaleString()}`;
-        document.getElementById('modalLow24h').textContent = `$${data.market_data.low_24h.usd.toLocaleString()}`;
-        document.getElementById('modalVolume24h').textContent = `$${data.market_data.total_volume.usd.toLocaleString()}`;
-        document.getElementById('modalMarketCap').textContent = `$${data.market_data.market_cap.usd.toLocaleString()}`;
+        document.getElementById('modalHigh24h').textContent = `$${parseFloat(tickerData.highPrice).toLocaleString()}`;
+        document.getElementById('modalLow24h').textContent = `$${parseFloat(tickerData.lowPrice).toLocaleString()}`;
+        document.getElementById('modalVolume24h').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice))}`;
+        document.getElementById('modalMarketCap').textContent = `$${formatNumber(parseFloat(tickerData.volume) * parseFloat(tickerData.lastPrice) * 10)}`;
 
-        // 獲取價格歷史數據並繪製圖表
-        await updateChart(cryptoId, '24h');
-    } catch (error) {
-        console.error('獲取詳細數據時發生錯誤:', error);
-    }
-}
-
-// 更新圖表
-async function updateChart(cryptoId, period) {
-    try {
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${cryptoId}/market_chart?vs_currency=usd&days=${period === '24h' ? '1' : period === '7d' ? '7' : period === '30d' ? '30' : '365'}`);
-        const data = await response.json();
-
-        const prices = data.prices;
-        const labels = prices.map(price => {
-            const date = new Date(price[0]);
-            return period === '24h' 
-                ? date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-                : date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
-        });
-        const values = prices.map(price => price[1]);
-
+        // 更新圖表
         const ctx = document.getElementById('priceChart').getContext('2d');
-
         if (priceChart) {
             priceChart.destroy();
         }
+
+        const labels = klinesData.map(k => new Date(k[0]).toLocaleDateString('zh-TW'));
+        const values = klinesData.map(k => parseFloat(k[4])); // 收盤價
 
         priceChart = new Chart(ctx, {
             type: 'line',
@@ -235,7 +221,7 @@ async function updateChart(cryptoId, period) {
             }
         });
     } catch (error) {
-        console.error('更新圖表時發生錯誤:', error);
+        console.error('獲取詳細數據時發生錯誤:', error);
     }
 }
 
@@ -248,13 +234,9 @@ async function updatePrices(retryCount = 0) {
         // 顯示加載狀態
         cryptoGrid.innerHTML = '<div class="loading">正在加載加密貨幣數據...</div>';
         
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h', {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-
+        // 使用 Binance API
+        const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -265,46 +247,65 @@ async function updatePrices(retryCount = 0) {
             throw new Error('Invalid data format received');
         }
 
+        // 過濾出 USDT 交易對
+        const usdtPairs = prices.filter(p => p.symbol.endsWith('USDT'));
+        
+        // 獲取價格數據
+        const priceResponse = await fetch('https://api.binance.com/api/v3/ticker/price');
+        const priceData = await priceResponse.json();
+        const priceMap = new Map(priceData.map(p => [p.symbol, parseFloat(p.price)]));
+
         cryptoGrid.innerHTML = '';
         
         let totalMarketCap = 0;
         let totalVolume = 0;
         let btcMarketCap = 0;
         
-        prices.forEach(crypto => {
-            totalMarketCap += crypto.market_cap || 0;
-            totalVolume += crypto.total_volume || 0;
-            if (crypto.symbol.toUpperCase() === 'BTC') {
-                btcMarketCap = crypto.market_cap || 0;
+        // 只顯示主要的加密貨幣
+        const mainCoins = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'SOL', 'DOT', 'MATIC', 'LINK'];
+        
+        usdtPairs.forEach(crypto => {
+            const symbol = crypto.symbol.replace('USDT', '');
+            if (!mainCoins.includes(symbol)) return;
+
+            const price = priceMap.get(crypto.symbol) || 0;
+            const volume = parseFloat(crypto.volume) * price;
+            const marketCap = volume * 10; // 估算市值
+            
+            totalMarketCap += marketCap;
+            totalVolume += volume;
+            if (symbol === 'BTC') {
+                btcMarketCap = marketCap;
             }
             
             const card = document.createElement('div');
             card.className = 'crypto-card';
-            card.onclick = () => showCryptoDetail(crypto.id);
+            card.onclick = () => showCryptoDetail(symbol.toLowerCase());
             
-            const iconClass = cryptoIcons[crypto.symbol.toUpperCase()] || 'fas fa-coins';
-            const name = cryptoNames[crypto.symbol.toUpperCase()] || crypto.name;
+            const iconClass = cryptoIcons[symbol] || 'fas fa-coins';
+            const name = cryptoNames[symbol] || symbol;
+            const priceChange = parseFloat(crypto.priceChangePercent);
             
             card.innerHTML = `
                 <div class="crypto-header">
                     <i class="${iconClass}"></i>
-                    <h2>${name} <span class="crypto-symbol">${crypto.symbol.toUpperCase()}</span></h2>
+                    <h2>${name} <span class="crypto-symbol">${symbol}</span></h2>
                 </div>
                 <div class="crypto-price">
-                    <span class="price">$${crypto.current_price.toLocaleString()}</span>
-                    <span class="change ${crypto.price_change_percentage_24h >= 0 ? 'positive' : 'negative'}">
-                        <i class="fas fa-arrow-${crypto.price_change_percentage_24h >= 0 ? 'up' : 'down'}"></i>
-                        ${Math.abs(crypto.price_change_percentage_24h).toFixed(2)}%
+                    <span class="price">$${price.toLocaleString()}</span>
+                    <span class="change ${priceChange >= 0 ? 'positive' : 'negative'}">
+                        <i class="fas fa-arrow-${priceChange >= 0 ? 'up' : 'down'}"></i>
+                        ${Math.abs(priceChange).toFixed(2)}%
                     </span>
                 </div>
                 <div class="crypto-stats">
                     <div class="stat-item">
                         <span class="stat-label">24h 交易量</span>
-                        <span class="stat-value">$${formatNumber(crypto.total_volume)}</span>
+                        <span class="stat-value">$${formatNumber(volume)}</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">市值</span>
-                        <span class="stat-value">$${formatNumber(crypto.market_cap)}</span>
+                        <span class="stat-value">$${formatNumber(marketCap)}</span>
                     </div>
                 </div>
             `;
