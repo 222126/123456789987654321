@@ -240,12 +240,31 @@ async function updateChart(cryptoId, period) {
 }
 
 // 更新加密貨幣價格
-async function updatePrices() {
+async function updatePrices(retryCount = 0) {
+    const maxRetries = 3;
+    const cryptoGrid = document.getElementById('cryptoGrid');
+    
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h');
+        // 顯示加載狀態
+        cryptoGrid.innerHTML = '<div class="loading">正在加載加密貨幣數據...</div>';
+        
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h', {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const prices = await response.json();
         
-        const cryptoGrid = document.getElementById('cryptoGrid');
+        if (!Array.isArray(prices) || prices.length === 0) {
+            throw new Error('Invalid data format received');
+        }
+
         cryptoGrid.innerHTML = '';
         
         let totalMarketCap = 0;
@@ -253,10 +272,10 @@ async function updatePrices() {
         let btcMarketCap = 0;
         
         prices.forEach(crypto => {
-            totalMarketCap += crypto.market_cap;
-            totalVolume += crypto.total_volume;
+            totalMarketCap += crypto.market_cap || 0;
+            totalVolume += crypto.total_volume || 0;
             if (crypto.symbol.toUpperCase() === 'BTC') {
-                btcMarketCap = crypto.market_cap;
+                btcMarketCap = crypto.market_cap || 0;
             }
             
             const card = document.createElement('div');
@@ -300,23 +319,73 @@ async function updatePrices() {
         
     } catch (error) {
         console.error('更新價格時發生錯誤:', error);
-        document.getElementById('cryptoGrid').innerHTML = '<p>無法加載加密貨幣數據，請稍後再試。</p>';
+        
+        if (retryCount < maxRetries) {
+            // 重試
+            console.log(`重試中... (${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => updatePrices(retryCount + 1), 2000); // 2秒後重試
+        } else {
+            // 顯示錯誤信息
+            cryptoGrid.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>無法加載加密貨幣數據</p>
+                    <p class="error-details">請檢查您的網絡連接或稍後再試</p>
+                    <button onclick="updatePrices()" class="retry-button">
+                        <i class="fas fa-sync-alt"></i> 重試
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
-// 格式化數字
-function formatNumber(num) {
-    if (num >= 1e12) {
-        return `${(num / 1e12).toFixed(2)}T`;
-    } else if (num >= 1e9) {
-        return `${(num / 1e9).toFixed(2)}B`;
-    } else if (num >= 1e6) {
-        return `${(num / 1e6).toFixed(2)}M`;
-    } else if (num >= 1e3) {
-        return `${(num / 1e3).toFixed(2)}K`;
+// 添加加載和錯誤狀態的樣式
+const style = document.createElement('style');
+style.textContent = `
+    .loading {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-secondary);
+        font-size: 1.1rem;
     }
-    return num.toFixed(2);
-}
+
+    .error-message {
+        text-align: center;
+        padding: 2rem;
+        color: var(--danger-color);
+    }
+
+    .error-message i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-details {
+        color: var(--text-secondary);
+        margin: 0.5rem 0 1rem;
+    }
+
+    .retry-button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-size: 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .retry-button:hover {
+        background-color: var(--secondary-color);
+        transform: translateY(-1px);
+    }
+`;
+document.head.appendChild(style);
 
 // 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
