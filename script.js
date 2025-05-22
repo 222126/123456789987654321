@@ -660,26 +660,34 @@ function updateCharts(data) {
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            // 創建簡單的價格趨勢圖
+            // 生成模擬的價格數據點
+            const pricePoints = [];
+            const basePrice = crypto.price;
+            const change = crypto.change_24h / 100;
+            
+            // 生成6個數據點，模擬24小時的價格變化
+            for (let i = 0; i < 6; i++) {
+                const factor = 1 - (change * (5 - i) / 5);
+                pricePoints.push(basePrice * factor);
+            }
+
+            // 創建圖表
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: ['1h', '2h', '3h', '4h', '5h', '6h'],
+                    labels: ['4h前', '3h前', '2h前', '1h前', '30分前', '現在'],
                     datasets: [{
                         label: '價格',
-                        data: [
-                            crypto.price * (1 - crypto.change_24h / 100),
-                            crypto.price * (1 - crypto.change_24h / 100 * 0.8),
-                            crypto.price * (1 - crypto.change_24h / 100 * 0.6),
-                            crypto.price * (1 - crypto.change_24h / 100 * 0.4),
-                            crypto.price * (1 - crypto.change_24h / 100 * 0.2),
-                            crypto.price
-                        ],
+                        data: pricePoints,
                         borderColor: crypto.change_24h >= 0 ? '#2ecc71' : '#e74c3c',
-                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                        backgroundColor: crypto.change_24h >= 0 ? 
+                            'rgba(46, 204, 113, 0.1)' : 
+                            'rgba(231, 76, 60, 0.1)',
                         borderWidth: 2,
                         fill: true,
-                        tension: 0.4
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 0
                     }]
                 },
                 options: {
@@ -700,6 +708,9 @@ function updateCharts(data) {
                         y: {
                             display: false
                         }
+                    },
+                    animation: {
+                        duration: 0
                     }
                 }
             });
