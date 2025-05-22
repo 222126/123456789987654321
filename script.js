@@ -628,6 +628,8 @@ document.head.appendChild(timeButtonStyle);
 
 // 格式化數字
 function formatNumber(num) {
+    if (!num && num !== 0) return '0';
+    
     if (num >= 1e12) {
         return `${(num / 1e12).toFixed(2)}T`;
     } else if (num >= 1e9) {
@@ -750,32 +752,21 @@ function loadNews() {
                 const newsCard = document.createElement('article');
                 newsCard.className = 'news-card';
                 
-                const date = new Date(article.published_at * 1000);
-                const formattedDate = date.toLocaleDateString('zh-TW', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                
                 newsCard.innerHTML = `
                     <div class="news-content">
                         <a href="${article.link}" target="_blank">
                             <h3>${article.title}</h3>
                         </a>
-                        <p class="news-snippet">${article.snippet}</p>
-                        <div class="news-meta">
-                            <span class="news-source">${article.source}</span>
-                            <span class="news-date">${formattedDate}</span>
-                        </div>
                     </div>
                 `;
                 
                 newsGrid.appendChild(newsCard);
             });
         })
-        .catch(error => console.error('Error loading news:', error));
+        .catch(error => {
+            console.error('加載新聞時發生錯誤:', error);
+            document.getElementById('newsGrid').innerHTML = '<p>無法加載新聞，請稍後再試。</p>';
+        });
 }
 
 // 更新加密貨幣數據
