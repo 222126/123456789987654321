@@ -794,7 +794,7 @@ async function updateCryptoData() {
         let totalVolume = 0;
         data.forEach(crypto => {
             totalMarketCap += crypto.market_cap || 0;
-            totalVolume += crypto.volume_24h || 0;
+            totalVolume += (crypto.volume_24h * crypto.price) || 0;
         });
         
         // 更新市場概況
