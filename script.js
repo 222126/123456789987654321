@@ -698,7 +698,8 @@ function updateCharts(data) {
 // 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
     updateCryptoData();
-    // 每分鐘更新一次價格
+    loadNews();
+    // 每分鐘更新一次數據
     setInterval(updateCryptoData, 60000);
 
     // 關閉模態框
@@ -781,6 +782,9 @@ function loadNews() {
 async function updateCryptoData() {
     try {
         const response = await fetch('prices.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         
         // 更新最後更新時間
