@@ -635,6 +635,11 @@ function formatNumber(num) {
         num = parseFloat(num.toFixed(8));
     }
     
+    // 處理極小數
+    if (num < 0.000001) {
+        return num.toExponential(6);
+    }
+    
     if (num >= 1e12) {
         return `${(num / 1e12).toFixed(2)}T`;
     } else if (num >= 1e9) {
@@ -781,7 +786,23 @@ async function updateCryptoData() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
         const data = await response.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            throw new Error('無效的數據格式');
+        }
+        
+        // 驗證數據格式
+        data.forEach(crypto => {
+            if (!crypto.symbol || typeof crypto.price !== 'number' || 
+                typeof crypto.change_24h !== 'number' || 
+                typeof crypto.volume_24h !== 'number' || 
+                typeof crypto.high_24h !== 'number' || 
+                typeof crypto.low_24h !== 'number' || 
+                typeof crypto.market_cap !== 'number') {
+                throw new Error(`無效的數據格式: ${JSON.stringify(crypto)}`);
+            }
+        });
         
         // 更新最後更新時間
         const lastUpdated = document.querySelector('.last-updated');
@@ -793,8 +814,12 @@ async function updateCryptoData() {
         let totalMarketCap = 0;
         let totalVolume = 0;
         data.forEach(crypto => {
-            totalMarketCap += crypto.market_cap || 0;
-            totalVolume += (crypto.volume_24h * crypto.price) || 0;
+            if (crypto.market_cap) {
+                totalMarketCap += crypto.market_cap;
+            }
+            if (crypto.volume_24h && crypto.price) {
+                totalVolume += crypto.volume_24h * crypto.price;
+            }
         });
         
         // 更新市場概況
@@ -810,7 +835,7 @@ async function updateCryptoData() {
         }
         if (btcDominanceElement) {
             const btc = data.find(c => c.symbol === 'BTC');
-            const btcDominance = btc ? (btc.market_cap / totalMarketCap * 100) : 0;
+            const btcDominance = btc && totalMarketCap > 0 ? (btc.market_cap / totalMarketCap * 100) : 0;
             btcDominanceElement.textContent = `${btcDominance.toFixed(2)}%`;
         }
         
