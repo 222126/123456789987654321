@@ -630,6 +630,11 @@ document.head.appendChild(timeButtonStyle);
 function formatNumber(num) {
     if (!num && num !== 0) return '0';
     
+    // 處理科學記數法
+    if (num.toString().includes('e')) {
+        num = parseFloat(num.toFixed(8));
+    }
+    
     if (num >= 1e12) {
         return `${(num / 1e12).toFixed(2)}T`;
     } else if (num >= 1e9) {
@@ -820,6 +825,9 @@ async function updateCryptoData() {
                 const cryptoName = cryptoNames[crypto.symbol] || crypto.symbol;
                 const cryptoIcon = cryptoIcons[crypto.symbol] || 'fas fa-coins';
                 
+                // 計算交易量（以美元計）
+                const volumeUSD = crypto.volume_24h * crypto.price;
+                
                 cryptoGrid.innerHTML += `
                     <div class="crypto-card" onclick="showCryptoDetail('${crypto.symbol}')">
                         <div class="crypto-header">
@@ -836,7 +844,7 @@ async function updateCryptoData() {
                         <div class="crypto-details">
                             <div class="volume">
                                 <span>24h 交易量:</span>
-                                <span>$${formatNumber(crypto.volume_24h)}</span>
+                                <span>$${formatNumber(volumeUSD)}</span>
                             </div>
                             <div class="high-low">
                                 <span>高: $${formatNumber(crypto.high_24h)}</span>
