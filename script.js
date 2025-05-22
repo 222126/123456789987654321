@@ -626,25 +626,97 @@ timeButtonStyle.textContent = `
 `;
 document.head.appendChild(timeButtonStyle);
 
+// 格式化數字
+function formatNumber(num) {
+    if (num >= 1e12) {
+        return `${(num / 1e12).toFixed(2)}T`;
+    } else if (num >= 1e9) {
+        return `${(num / 1e9).toFixed(2)}B`;
+    } else if (num >= 1e6) {
+        return `${(num / 1e6).toFixed(2)}M`;
+    } else if (num >= 1e3) {
+        return `${(num / 1e3).toFixed(2)}K`;
+    }
+    return num.toFixed(2);
+}
+
+// 更新圖表
+function updateCharts(data) {
+    data.forEach(crypto => {
+        const canvas = document.getElementById(`chart-${crypto.symbol.toLowerCase()}`);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            // 創建簡單的價格趨勢圖
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['1h', '2h', '3h', '4h', '5h', '6h'],
+                    datasets: [{
+                        label: '價格',
+                        data: [
+                            crypto.price * (1 - crypto.change_24h / 100),
+                            crypto.price * (1 - crypto.change_24h / 100 * 0.8),
+                            crypto.price * (1 - crypto.change_24h / 100 * 0.6),
+                            crypto.price * (1 - crypto.change_24h / 100 * 0.4),
+                            crypto.price * (1 - crypto.change_24h / 100 * 0.2),
+                            crypto.price
+                        ],
+                        borderColor: crypto.change_24h >= 0 ? '#2ecc71' : '#e74c3c',
+                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+
 // 頁面加載時初始化
 document.addEventListener('DOMContentLoaded', () => {
-    updatePrices();
+    updateCryptoData();
     // 每分鐘更新一次價格
-    setInterval(updatePrices, 60000);
+    setInterval(updateCryptoData, 60000);
 
     // 關閉模態框
     const modal = document.getElementById('cryptoDetailModal');
-    const closeBtn = document.querySelector('.close');
-    
-    closeBtn.onclick = () => {
-        modal.style.display = 'none';
-    };
-    
-    window.onclick = (event) => {
-        if (event.target === modal) {
-            modal.style.display = 'none';
+    if (modal) {
+        const closeBtn = document.querySelector('.close');
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
         }
-    };
+        
+        window.onclick = (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+    }
 
     // 時間範圍按鈕點擊事件
     document.querySelectorAll('.time-btn').forEach(btn => {
@@ -751,11 +823,12 @@ async function updateCryptoData() {
                 const changeClass = crypto.change_24h >= 0 ? 'positive' : 'negative';
                 const changeIcon = crypto.change_24h >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
                 const cryptoName = cryptoNames[crypto.symbol] || crypto.symbol;
+                const cryptoIcon = cryptoIcons[crypto.symbol] || 'fas fa-coins';
                 
                 cryptoGrid.innerHTML += `
-                    <div class="crypto-card">
+                    <div class="crypto-card" onclick="showCryptoDetail('${crypto.symbol}')">
                         <div class="crypto-header">
-                            <i class="crypto-icon fas fa-coins"></i>
+                            <i class="crypto-icon ${cryptoIcon}"></i>
                             <h2>${cryptoName} <span class="crypto-symbol">${crypto.symbol}</span></h2>
                         </div>
                         <div class="crypto-price">
@@ -788,6 +861,19 @@ async function updateCryptoData() {
         
     } catch (error) {
         console.error('更新數據時發生錯誤:', error);
+        const cryptoGrid = document.getElementById('cryptoGrid');
+        if (cryptoGrid) {
+            cryptoGrid.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>無法加載數據</p>
+                    <p class="error-details">${error.message}</p>
+                    <button onclick="updateCryptoData()" class="retry-button">
+                        <i class="fas fa-sync-alt"></i> 重試
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
